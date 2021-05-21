@@ -62,8 +62,9 @@ class NewtonOptimizer:
         gx = self.objective.grad(self.curr_x)
         hx = self.objective.hessian(self.curr_x)
 
-        # Solve the Newton system Hd = -g.
-        d = -np.matmul(np.linalg.inv(hx), gx)
+        # Solve the Newton system Hd = -g. Note that we need the pseudo inverse
+        # of hx in general since it can be singular.
+        d = -np.matmul(np.linalg.pinv(hx), gx)
 
         self.next_x = self.curr_x + self.alpha * d
 
@@ -74,7 +75,8 @@ class NewtonOptimizer:
         num_iters = 0
         while num_iters < self.max_iters:
 
-            # One step if always perfromed since the stopping creterion is |x_k+1 - x_k|.
+            # One step if always perfromed since the stopping creterion is
+            # |x_k+1 - x_k|.
             self.step()
 
             dx = self.next_x - self.curr_x
@@ -89,7 +91,7 @@ class NewtonOptimizer:
             if norm_dx < self.threshold:
                 break
 
-            print(f"{num_iters}: ", self.curr_x, self.objective(self.curr_x))
+            # print(f"{num_iters}: ", self.curr_x, self.objective(self.curr_x))
 
         fmin = self.objective(self.curr_x)
 
@@ -168,27 +170,3 @@ def denoise_img(
     eps: float
 ) -> Tuple:
     pass
-
-
-def main():
-
-    # Q = np.eye(2)
-    Q = np.array([[1., 2.],
-                  [2., 1.]])
-
-    b = np.array([2, 3])
-    # b = np.array([0, 0])
-
-    x_0 = np.array([0., 0.])
-
-    qf = QuadraticFunction(Q, b)
-
-    newton_opt = NewtonOptimizer(qf, x_0=x_0, threshold=1e-4 , alpha=0.1, max_iters=1000)
-
-    print(newton_opt.optimize())
-
-    return
-
-
-if __name__ == "__main__":
-    main()
