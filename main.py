@@ -150,7 +150,8 @@ class BFGSOptimizer:
     def update_step_size(self) -> np.ndarray:
         """ Armijo rule. """
 
-        h = lambda a : self.objective(self.curr_x + a * self.next_d) - self.objective(self.curr_x)
+        h = lambda a : self.objective(self.curr_x + a * self.next_d) - \
+                       self.objective(self.curr_x)
         assert h(0) == 0.
 
         # g = h'(0)
@@ -199,7 +200,10 @@ class BFGSOptimizer:
         v_k = p_k / mu_k - S_k / tau_k
 
         # print(mu_k, tau_k)
-        self.B = self.B + np.outer(p_k, p_k) / mu_k - np.outer(S_k, S_k) / tau_k + tau_k * np.outer(v_k, v_k)
+        self.B = self.B + \
+                 np.outer(p_k, p_k) / mu_k - \
+                 np.outer(S_k, S_k) / tau_k + \
+                 tau_k * np.outer(v_k, v_k)
 
         return self.B
 
@@ -231,7 +235,7 @@ class BFGSOptimizer:
             if norm_dx < self.threshold:
                 break
 
-            # print(f"{num_iters}: ", self.curr_x, norm_dx, self.objective(self.curr_x))
+            print(f"{num_iters}: ", norm_dx, self.objective(self.curr_x))
 
         fmin = self.objective(self.curr_x)
 
@@ -246,19 +250,92 @@ class TotalVariationObjective:
         mu: float,
         eps: float
     ) -> None:
-        pass
+
+        """
+        Args:
+            src_img : (n,m) matrix, input noisy image.
+            mu      : Regularization parameter, determines the weight of total
+                      variation term.
+            eps     : Small number for numerical stability.
+        """
+
+        self.mu = mu
+        self.eps = eps
+        self.src_im = src_img
+        self.H, self.W = self.src_im.shape
 
     def __call__(
         self,
         img: np.ndarray
     ) -> np.ndarray:
-        pass
+        """
+        Args:
+            img : (nxm,) vector, denoised image.
+
+        """
+
+        # This operation does not copy `img`.
+        im = np.reshape(img, (self.H, self.W))
+
+        mse = np.sum((im - self.src_im)**2) / (self.H * self.W)
+
+        # Note `gx` and `gy` have the same shape.
+        gx = im[:-1, 1:] - im[:-1, :-1]
+        gy = im[1:, :-1] - im[:-1, :-1]
+
+        tv = np.sum(np.sqrt(gx**2 + gy**2 + self.eps))
+
+        return mse + self.mu * tv
 
     def grad(
         self,
         img: np.ndarray
     ) -> np.ndarray:
-        pass
+        """
+        Args:
+            img : (nxm,) vector, denoised image.
+
+        Return:
+            grad : (nxm,) vector, the objective's gradient.
+        """
+
+        # This operation does not copy `img`.
+        im = np.reshape(img, (self.H, self.W))
+
+        # TODO; Analytic grad.
+        # mse_grad = 2 * (im - self.src_im) / (self.H * self.W)
+        #
+        # gx = im[:-1, 1:] - im[:-1, :-1]
+        # gy = im[1:, :-1] - im[:-1, :-1]
+        # tv = np.sqrt(gx ** 2 + gy ** 2 + self.eps)
+        #
+        # fx = gx / tv
+        # fy = gy / tv
+
+        # This decreases the rows and columns by one again.
+        # fx_diff = np.zeros((self.H, self.W))
+        # fx_diff[] = fx[:-1, 1:]
+        # fx_diff[] = -fx[:-1, 1:]
+        #
+        # # tv_grad = (fx[:-1, 1:] - fx[:-1, :-1]) + (fy[1:, :-1] - fy[:-1, :-1])
+        # tv_grad = (fx[:-1, 1:] - fx[:-1, :-1]) + (fy[1:, :-1] - fy[:-1, :-1])
+        #
+        # grad = mse_grad + self.mu * tv_grad
+        # grad = None
+
+        # TODO: Numerical gradient
+        eps = 1e-6
+        grad_num = np.zeros((self.H, self.W))
+        for i in range(self.H):
+            for j in range(self.W):
+                dim = np.zeros((self.H, self.W))
+                dim[i, j] += eps
+                impdim = im.copy() + dim
+                grad_num[i, j] = (self.__call__(impdim) - self.__call__(im)) / eps
+
+        # print("max grad error:", np.abs(grad_num - grad).max())
+
+        return grad_num.flatten()
 
 
 def denoise_img(
@@ -272,4 +349,27 @@ def denoise_img(
     mu: float,
     eps: float
 ) -> Tuple:
-    pass
+
+    """
+    Args:
+        noisy_img   : (n,m) matrix, input noisy image.
+        For the rest: See BFGSOptimizer and TotalVariationObjective.
+
+    """
+
+    tv_obj = TotalVariationObjective(src_img=noisy_img, mu=mu, eps=eps)
+
+    bfgs_opt = BFGSOptimizer(
+        objective=tv_obj,
+        x_0=noisy_img.flatten(),
+        B_0=B_0,
+        alpha_0=alpha_0,
+        beta=beta,
+        sigma=sigma,
+        threshold=threshold,
+        max_iters=max_iters
+    )
+
+    (total_variation_min, minimizer, num_iters) = bfgs_opt.optimize()
+
+    return (total_variation_min, minimizer, num_iters)
