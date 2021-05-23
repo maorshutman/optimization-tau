@@ -249,7 +249,7 @@ def denoise_image_test_0():
         threshold=0.1,
         max_iters=30,
         mu=0.0001,
-        eps=1e-6
+        eps=1e-10
     )
 
     plt.subplot(211)

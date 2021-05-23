@@ -321,10 +321,17 @@ class TotalVariationObjective:
         gx_m1[:, 1:] = gx
         gy_m1[1:, :] = gy
 
+        # TODO: Denominator is not correct.
+        tv_y_p1_grad = gy_p1 / np.sqrt(gx_p1 ** 2 + gy_p1 ** 2 + self.eps)
         tv_x_p1_grad = gx_p1 / np.sqrt(gx_p1**2 + gy_p1**2 + self.eps)
-        tv_y_p1_grad = gy_p1 / np.sqrt(gx_p1**2 + gy_p1**2 + self.eps)
-        tv_x_m1_grad = gx_m1 / np.sqrt(gx_m1**2 + gy_m1**2 + self.eps)
-        tv_y_m1_grad = gy_m1 / np.sqrt(gx_m1**2 + gy_m1**2 + self.eps)
+
+        gx_p1_shifted = np.zeros_like(im) # shift down
+        gx_p1_shifted[1:, :] = gx_p1[:-1, :]
+        gy_p1_shifted = np.zeros_like(im) # shift right
+        gy_p1_shifted[:, 1:] = gy_p1[:, :-1]
+
+        tv_y_m1_grad = gy_m1 / np.sqrt(gx_p1_shifted**2 + gy_m1**2 + self.eps)
+        tv_x_m1_grad = gx_m1 / np.sqrt(gx_m1**2 + gy_p1_shifted**2 + self.eps)
 
         mse_grad = 2 * (im - self.src_im) / (self.H * self.W)
         tv_grad = tv_y_m1_grad - tv_y_p1_grad + tv_x_m1_grad - tv_x_p1_grad
@@ -332,7 +339,7 @@ class TotalVariationObjective:
         grad = mse_grad + self.mu * tv_grad
 
         # TODO: Numerical gradient
-        # eps = 1e-6
+        # eps = 1e-8
         # grad_num = np.zeros((self.H, self.W))
         # for i in range(self.H):
         #     for j in range(self.W):
@@ -340,7 +347,8 @@ class TotalVariationObjective:
         #         dim[i, j] += eps
         #         impdim = im.copy() + dim
         #         grad_num[i, j] = (self.__call__(impdim) - self.__call__(im)) / eps
-        # print("max grad error:", np.abs(grad_num - grad).max())
+        # rel_err = np.abs(grad_num - grad) / np.abs(grad_num)
+        # print("max grad error:", rel_err.max())
 
         return grad.flatten()
 
