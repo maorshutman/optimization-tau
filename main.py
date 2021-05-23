@@ -279,9 +279,13 @@ class TotalVariationObjective:
 
         mse = np.sum((im - self.src_im)**2) / (self.H * self.W)
 
-        # Note `gx` and `gy` have the same shape.
-        gx = im[:-1, 1:] - im[:-1, :-1]
-        gy = im[1:, :-1] - im[:-1, :-1]
+        # Use Newman boundary conditions. I.e., for invalid indices use 0.
+        # gy is zero for the last row.
+        # gx is zero for the last column.
+        gx = np.zeros_like(im)
+        gy = np.zeros_like(im)
+        gx[:, :-1] = im[:, 1:] - im[:, :-1]
+        gy[:-1, :] = im[1:, :] - im[:-1, :]
 
         tv = np.sum(np.sqrt(gx**2 + gy**2 + self.eps))
 
@@ -302,40 +306,43 @@ class TotalVariationObjective:
         # This operation does not copy `img`.
         im = np.reshape(img, (self.H, self.W))
 
-        # TODO; Analytic grad.
-        # mse_grad = 2 * (im - self.src_im) / (self.H * self.W)
-        #
-        # gx = im[:-1, 1:] - im[:-1, :-1]
-        # gy = im[1:, :-1] - im[:-1, :-1]
-        # tv = np.sqrt(gx ** 2 + gy ** 2 + self.eps)
-        #
-        # fx = gx / tv
-        # fy = gy / tv
+        gx = im[:, 1:] - im[:, :-1]
+        gy = im[1:, :] - im[:-1, :]
 
-        # This decreases the rows and columns by one again.
-        # fx_diff = np.zeros((self.H, self.W))
-        # fx_diff[] = fx[:-1, 1:]
-        # fx_diff[] = -fx[:-1, 1:]
-        #
-        # # tv_grad = (fx[:-1, 1:] - fx[:-1, :-1]) + (fy[1:, :-1] - fy[:-1, :-1])
-        # tv_grad = (fx[:-1, 1:] - fx[:-1, :-1]) + (fy[1:, :-1] - fy[:-1, :-1])
-        #
-        # grad = mse_grad + self.mu * tv_grad
-        # grad = None
+        # k+1 minus k
+        gx_p1 = np.zeros_like(im)
+        gy_p1 = np.zeros_like(im)
+        gx_p1[:, :-1] = gx
+        gy_p1[:-1, :] = gy
+
+        # k minus k-1, just a shifted version of k+1 minus k.
+        gx_m1 = np.zeros_like(im)
+        gy_m1 = np.zeros_like(im)
+        gx_m1[:, 1:] = gx
+        gy_m1[1:, :] = gy
+
+        tv_x_p1_grad = gx_p1 / np.sqrt(gx_p1**2 + gy_p1**2 + self.eps)
+        tv_y_p1_grad = gy_p1 / np.sqrt(gx_p1**2 + gy_p1**2 + self.eps)
+        tv_x_m1_grad = gx_m1 / np.sqrt(gx_m1**2 + gy_m1**2 + self.eps)
+        tv_y_m1_grad = gy_m1 / np.sqrt(gx_m1**2 + gy_m1**2 + self.eps)
+
+        mse_grad = 2 * (im - self.src_im) / (self.H * self.W)
+        tv_grad = tv_y_m1_grad - tv_y_p1_grad + tv_x_m1_grad - tv_x_p1_grad
+
+        grad = mse_grad + self.mu * tv_grad
 
         # TODO: Numerical gradient
-        eps = 1e-6
-        grad_num = np.zeros((self.H, self.W))
-        for i in range(self.H):
-            for j in range(self.W):
-                dim = np.zeros((self.H, self.W))
-                dim[i, j] += eps
-                impdim = im.copy() + dim
-                grad_num[i, j] = (self.__call__(impdim) - self.__call__(im)) / eps
-
+        # eps = 1e-6
+        # grad_num = np.zeros((self.H, self.W))
+        # for i in range(self.H):
+        #     for j in range(self.W):
+        #         dim = np.zeros((self.H, self.W))
+        #         dim[i, j] += eps
+        #         impdim = im.copy() + dim
+        #         grad_num[i, j] = (self.__call__(impdim) - self.__call__(im)) / eps
         # print("max grad error:", np.abs(grad_num - grad).max())
 
-        return grad_num.flatten()
+        return grad.flatten()
 
 
 def denoise_img(
