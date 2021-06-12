@@ -3,13 +3,6 @@ from typing import Callable, Tuple
 import numpy as np
 
 
-def student_id():
-    """
-    Returns a tuple of student's ID and TAU email address.
-    """
-    return '305280604', r'maorshut@protonmail.com'
-
-
 class QuadraticFunction:
     def __init__(
         self, 
